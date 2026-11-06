@@ -3,6 +3,7 @@ import logging
 
 import boto3
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import DEMO_MODE, CORS_ORIGINS, AWS_REGION, DYNAMODB_TABLE
@@ -19,6 +20,10 @@ app = FastAPI(
     version="1.1.0",
     description="AWS resource inventory and CIS-inspired security checks"
 )
+
+@app.get("/")
+def root():
+    return RedirectResponse(url="/docs")
 
 
 app.add_middleware(
