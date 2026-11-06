@@ -1,0 +1,9 @@
+.env
+.env.local
+.venv/
+__pycache__/
+node_modules/
+.next/
+dynamodb-test*.json
+*.pyc
+.pytest_cache/
