@@ -103,7 +103,7 @@ cloud-posture-scanner/
 ### 1. Clone the repository
 
 ```bash
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone https://github.com/shreyadav17/cloud-posture-scanner.git
 cd cloud-posture-scanner
 ```
 

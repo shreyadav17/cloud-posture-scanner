@@ -1,10 +1,11 @@
 
 import logging
 
+import boto3
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import DEMO_MODE, CORS_ORIGINS
+from .config import DEMO_MODE, CORS_ORIGINS, AWS_REGION, DYNAMODB_TABLE
 from .demo import demo_data
 from .scanner import run_scan, save_scan
 
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Cloud Posture Scanner API",
-    version="1.0.0",
+    version="1.1.0",
     description="AWS resource inventory and CIS-inspired security checks"
 )
 
@@ -83,6 +84,95 @@ def summary():
         ),
         "generated_at": _state["generated_at"]
     }
+
+
+@app.get("/scan-history")
+def scan_history():
+    if DEMO_MODE:
+        return {
+            "history": [],
+            "message": "Scan history is available in live mode."
+        }
+
+    if not DYNAMODB_TABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="DynamoDB table is not configured"
+        )
+
+    try:
+        dynamodb = boto3.resource(
+            "dynamodb",
+            region_name=AWS_REGION
+        )
+
+        table = dynamodb.Table(DYNAMODB_TABLE)
+
+        response = table.scan(
+            Limit=50,
+            ProjectionExpression=(
+                "#sid, generated_at, instances, buckets, cis_results"
+            ),
+            ExpressionAttributeNames={
+                "#sid": "scan_id"
+            }
+        )
+
+        items = response.get("Items", [])
+
+        history = []
+
+        for item in items:
+            checks = item.get("cis_results", [])
+
+            passed = sum(
+                c.get("status") == "PASS" for c in checks
+            )
+
+            failed = sum(
+                c.get("status") == "FAIL" for c in checks
+            )
+
+            errors = sum(
+                c.get("status") in ("ERROR", "UNKNOWN")
+                for c in checks
+            )
+
+            evaluated = passed + failed
+
+            score = (
+                round((passed / evaluated) * 100)
+                if evaluated else None
+            )
+
+            history.append({
+                "scan_id": item.get("scan_id"),
+                "generated_at": item.get("generated_at"),
+                "instances": len(item.get("instances", [])),
+                "buckets": len(item.get("buckets", [])),
+                "passed": passed,
+                "failed": failed,
+                "errors": errors,
+                "security_score": score
+            })
+
+        history.sort(
+            key=lambda x: x.get("generated_at") or "",
+            reverse=True
+        )
+
+        return {
+            "history": history,
+            "count": len(history)
+        }
+
+    except Exception as e:
+        logger.exception("Scan history retrieval failed")
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unable to retrieve scan history: {_safe_error(e)}"
+        )
 
 
 @app.post("/scan")
